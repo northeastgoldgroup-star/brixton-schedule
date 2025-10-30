@@ -1,0 +1,32 @@
+{
+  "name": "discord-scheduler-bot",
+  "version": "1.0.0",
+  "description": "A Discord bot that schedules messages to be sent and deleted at specific times.",
+  "main": "src/index.ts",
+  "scripts": {
+    "start": "ts-node src/index.ts",
+    "test": "jest"
+  },
+  "dependencies": {
+    "discord.js": "^14.24.1",
+    "dotenv": "^10.0.0",
+    "node-cron": "^4.2.1",
+    "node-schedule": "^2.1.0"
+  },
+  "devDependencies": {
+    "@types/dotenv": "^8.2.0",
+    "@types/jest": "^27.0.0",
+    "@types/node": "^16.0.0",
+    "@types/node-cron": "^3.0.11",
+    "jest": "^27.0.0",
+    "ts-node": "^10.0.0",
+    "typescript": "^4.5.0"
+  },
+  "keywords": [
+    "discord",
+    "bot",
+    "scheduler"
+  ],
+  "author": "Your Name",
+  "license": "MIT"
+}
