@@ -130,73 +130,73 @@ public async registerCommands() {
 
 
     
-    private setupCommandHandler() {
-        this.client.on('interactionCreate', async (interaction) => {
-            if (!interaction.isChatInputCommand()) return;
+private setupCommandHandler() {
+    this.client.on('interactionCreate', async (interaction) => {
+        if (!interaction.isChatInputCommand()) return;
 
-            const roles = (interaction.member as any)?.roles;
-            const hasAdminRole = Array.isArray(roles)
-                ? roles.includes(CONFIG.ADMIN_ROLE_ID)
-                : !!roles?.cache?.has?.(CONFIG.ADMIN_ROLE_ID);
+        const roles = (interaction.member as any)?.roles;
+        const hasAdminRole = Array.isArray(roles)
+            ? roles.includes(CONFIG.ADMIN_ROLE_ID)
+            : !!roles?.cache?.has?.(CONFIG.ADMIN_ROLE_ID);
 
-            if (!hasAdminRole) {
-                await interaction.reply({ 
-                    content: '❌ You do not have permission to use this command.', 
-                    ephemeral: true 
-                });
-                return;
-            }
+        if (!hasAdminRole) {
+            await interaction.reply({ 
+                content: '❌ You do not have permission to use this command.', 
+                ephemeral: true 
+            });
+            return;
+        }
 
-            try {
-                switch (interaction.commandName) {
-                    case 'announce': {
-                        const interaction2 = interaction as ChatInputCommandInteraction<CacheType>;
-                        const host = interaction2.options.getUser('host');
-                        const time = interaction2.options.getString('time');
-                        
-                        if (!host || !time) {
-                            await interaction.reply({ 
-                                content: 'Missing required options.', 
-                                ephemeral: true 
-                            });
-                            return;
-                        }
-                        
-                        if (!this.isValidTime(time)) {
-                            await interaction.reply({ 
-                                content: 'Invalid time format (use HHMM or HH:MM)', 
-                                ephemeral: true 
-                            });
-                            return;
-                        }
-                        
-                        await interaction.deferReply({ ephemeral: true });
-                        await this.handleAnnounceCommand(interaction2, host, this.formatTime(time));
-                        await interaction.editReply({ content: 'Session announced!' });
-                        break;
+        try {
+            switch (interaction.commandName) {
+                case 'announce': {
+                    const host = interaction.options.getMember('host');
+                    const time = interaction.options.get('time')?.value as string;
+                    
+                    if (!host || !time) {
+                        await interaction.reply({ 
+                            content: 'Missing required options.', 
+                            ephemeral: true 
+                        });
+                        return;
                     }
-
-                    case 'startsession':
-                        await interaction.deferReply({ ephemeral: true });
-                        await this.handleStartSessionCommand(interaction as ChatInputCommandInteraction);
-                        await interaction.editReply({ content: 'Session started and reminders sent!' });
-                        break;
-
-                    case 'test':
-                        await interaction.deferReply({ ephemeral: true });
-                        await this.handleTestCommand(interaction as ChatInputCommandInteraction);
-                        await interaction.editReply({ content: 'Test message sent!' });
-                        break;
+                    
+                    if (!this.isValidTime(time)) {
+                        await interaction.reply({ 
+                            content: 'Invalid time format (use HHMM or HH:MM)', 
+                            ephemeral: true 
+                        });
+                        return;
+                    }
+                    
+                    await interaction.deferReply({ ephemeral: true });
+                    await this.handleAnnounceCommand(interaction, host.user, this.formatTime(time));
+                    await interaction.editReply({ content: 'Session announced!' });
+                    break;
                 }
-            } catch (error) {
-                console.error(`Error handling command ${interaction.commandName}:`, error);
-                await interaction.reply({ 
-                    content: 'An error occurred while processing the command.', 
-                    ephemeral: true 
-                }).catch(() => {});
+
+                case 'startsession':
+                    await interaction.deferReply({ ephemeral: true });
+                    await this.handleStartSessionCommand(interaction);
+                    await interaction.editReply({ content: 'Session started and reminders sent!' });
+                    break;
+
+                case 'test':
+                    await interaction.deferReply({ ephemeral: true });
+                    await this.handleTestCommand(interaction);
+                    await interaction.editReply({ content: 'Test message sent!' });
+                    break;
             }
-        });
-    }
+        } catch (error) {
+            console.error(`Error handling command ${interaction.commandName}:`, error);
+            await interaction.reply({ 
+                content: 'An error occurred while processing the command.', 
+                ephemeral: true 
+            }).catch(() => {});
+        }
+    });
+}
+
     private async tempReply(message: Message, content: string) {
         const reply = await message.reply(content);
         setTimeout(() => reply.delete().catch(() => {}), 5000);
