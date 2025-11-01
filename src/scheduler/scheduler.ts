@@ -132,18 +132,22 @@ public async registerCommands() {
     
 private setupCommandHandler() {
     this.client.on('interactionCreate', async (interaction) => {
+        // Only handle slash commands
         if (!interaction.isChatInputCommand()) return;
+
+        // Narrow the type for TS
         const commandInteraction = interaction as ChatInputCommandInteraction<CacheType>;
 
+        // Check admin role
         const roles = (commandInteraction.member as any)?.roles;
         const hasAdminRole = Array.isArray(roles)
             ? roles.includes(CONFIG.ADMIN_ROLE_ID)
             : !!roles?.cache?.has?.(CONFIG.ADMIN_ROLE_ID);
 
         if (!hasAdminRole) {
-            await commandInteraction.reply({ 
-                content: '❌ You do not have permission to use this command.', 
-                ephemeral: true 
+            await commandInteraction.reply({
+                content: '❌ You do not have permission to use this command.',
+                ephemeral: true,
             });
             return;
         }
@@ -151,22 +155,22 @@ private setupCommandHandler() {
         try {
             switch (commandInteraction.commandName) {
                 case 'announce': {
-                    const user = commandInteraction.options.getUser('host', true);
-                    const member = await commandInteraction.guild?.members.fetch(user.id).catch(() => null);
-                    const time = commandInteraction.options.getString('time', true);
+                    // Get options safely
+                    const host = commandInteraction.options.getUser('host', true);  // required
+                    const time = commandInteraction.options.getString('time', true); // required
 
                     if (!this.isValidTime(time)) {
-                        await commandInteraction.reply({ 
-                            content: 'Invalid time format (use HHMM or HH:MM)', 
-                            ephemeral: true 
+                        await commandInteraction.reply({
+                            content: 'Invalid time format (use HHMM or HH:MM)',
+                            ephemeral: true,
                         });
                         return;
                     }
 
                     await commandInteraction.deferReply({ ephemeral: true });
-                    await this.handleAnnounceCommand(commandInteraction, user, this.formatTime(time));
-                    await commandInteraction.editReply({ 
-                        content: `✅ Session announced!\nHost: ${member ? member.displayName : user.username}\nTime: ${this.formatTime(time)}` 
+                    await this.handleAnnounceCommand(commandInteraction, host, this.formatTime(time));
+                    await commandInteraction.editReply({
+                        content: `✅ Session announced!\nHost: ${host.username}\nTime: ${this.formatTime(time)}`
                     });
                     break;
                 }
@@ -184,13 +188,14 @@ private setupCommandHandler() {
             }
         } catch (error) {
             console.error(`Error handling command ${commandInteraction.commandName}:`, error);
-            await commandInteraction.reply({ 
-                content: 'An error occurred while processing the command.', 
-                ephemeral: true 
+            await commandInteraction.reply({
+                content: 'An error occurred while processing the command.',
+                ephemeral: true,
             }).catch(() => {});
         }
     });
 }
+
     
     private async tempReply(message: Message, content: string) {
         const reply = await message.reply(content);
