@@ -5,7 +5,9 @@ import {
     User,
     ApplicationCommandType,
     SlashCommandBuilder,
-    ChatInputCommandInteraction
+    ChatInputCommandInteraction,
+    CommandInteraction,
+    CacheType
 } from 'discord.js';
 import { CONFIG } from '../config';
 import cron from 'node-cron';
@@ -127,64 +129,74 @@ public async registerCommands() {
 }
 
 
+    
     private setupCommandHandler() {
-this.client.on('interactionCreate', async (interaction) => {
-    if (!interaction.isChatInputCommand()) return;
-        const roles = (interaction.member as any)?.roles;
-        const hasAdminRole = Array.isArray(roles)
-            ? roles.includes(CONFIG.ADMIN_ROLE_ID)
-            : !!roles?.cache?.has?.(CONFIG.ADMIN_ROLE_ID);
-        if (!hasAdminRole) {
-            await interaction.reply({ 
-                content: '❌ You do not have permission to use this command.', 
-                ephemeral: true 
-            });
-            return;
-        }
+        this.client.on('interactionCreate', async (interaction) => {
+            if (!interaction.isChatInputCommand()) return;
 
-        try {
-            switch (interaction.commandName) {
-                case 'announce': {
-                    if (!interaction.isCommand()) return; // Ensure it's a command interaction
-            const host = interaction.options.getUser('host', true);
-                    const time = interaction.options.getString('time', true);
-                    
-                    if (!this.isValidTime(time)) {
-                        await interaction.reply({ 
-                            content: 'Invalid time format (use HHMM or HH:MM)', 
-                            ephemeral: true 
-                        });
-                        return;
-                    }
-                    
-                    await interaction.deferReply({ ephemeral: true });
-                    await this.handleAnnounceCommand(interaction, host, this.formatTime(time));
-                    await interaction.editReply({ content: 'Session announced!' });
-                    break;
-                }
+            const roles = (interaction.member as any)?.roles;
+            const hasAdminRole = Array.isArray(roles)
+                ? roles.includes(CONFIG.ADMIN_ROLE_ID)
+                : !!roles?.cache?.has?.(CONFIG.ADMIN_ROLE_ID);
 
-                case 'startsession':
-                    await interaction.deferReply({ ephemeral: true });
-                    await this.handleStartSessionCommand(interaction);
-                    await interaction.editReply({ content: 'Session started and reminders sent!' });
-                    break;
-
-                case 'test':
-                    await interaction.deferReply({ ephemeral: true });
-                    await this.handleTestCommand(interaction);
-                    await interaction.editReply({ content: 'Test message sent!' });
-                    break;
+            if (!hasAdminRole) {
+                await interaction.reply({ 
+                    content: '❌ You do not have permission to use this command.', 
+                    ephemeral: true 
+                });
+                return;
             }
-        } catch (error) {
-            console.error(`Error handling command ${interaction.commandName}:`, error);
-            await interaction.reply({ 
-                content: 'An error occurred while processing the command.', 
-                ephemeral: true 
-            }).catch(() => {});
-        }
-    });
-}
 
+            try {
+                switch (interaction.commandName) {
+                    case 'announce': {
+                        const interaction2 = interaction as ChatInputCommandInteraction<CacheType>;
+                        const host = interaction2.options.getUser('host');
+                        const time = interaction2.options.getString('time');
+                        
+                        if (!host || !time) {
+                            await interaction.reply({ 
+                                content: 'Missing required options.', 
+                                ephemeral: true 
+                            });
+                            return;
+                        }
+                        
+                        if (!this.isValidTime(time)) {
+                            await interaction.reply({ 
+                                content: 'Invalid time format (use HHMM or HH:MM)', 
+                                ephemeral: true 
+                            });
+                            return;
+                        }
+                        
+                        await interaction.deferReply({ ephemeral: true });
+                        await this.handleAnnounceCommand(interaction2, host, this.formatTime(time));
+                        await interaction.editReply({ content: 'Session announced!' });
+                        break;
+                    }
+
+                    case 'startsession':
+                        await interaction.deferReply({ ephemeral: true });
+                        await this.handleStartSessionCommand(interaction as ChatInputCommandInteraction);
+                        await interaction.editReply({ content: 'Session started and reminders sent!' });
+                        break;
+
+                    case 'test':
+                        await interaction.deferReply({ ephemeral: true });
+                        await this.handleTestCommand(interaction as ChatInputCommandInteraction);
+                        await interaction.editReply({ content: 'Test message sent!' });
+                        break;
+                }
+            } catch (error) {
+                console.error(`Error handling command ${interaction.commandName}:`, error);
+                await interaction.reply({ 
+                    content: 'An error occurred while processing the command.', 
+                    ephemeral: true 
+                }).catch(() => {});
+            }
+        });
+    }
     private async tempReply(message: Message, content: string) {
         const reply = await message.reply(content);
         setTimeout(() => reply.delete().catch(() => {}), 5000);
