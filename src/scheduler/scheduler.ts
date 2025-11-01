@@ -4,10 +4,8 @@ import {
     Message, 
     User,
     ApplicationCommandType,
-    SlashCommandBuilder,
-    ChatInputCommandInteraction,
-    CommandInteractionOptionResolver,
-    CacheType
+    CommandInteraction,
+    SlashCommandBuilder
 } from 'discord.js';
 import { CONFIG } from '../config';
 import cron from 'node-cron';
@@ -129,61 +127,50 @@ public async registerCommands() {
 }
 
 
-    
-private setupCommandHandler() {
-    this.client.on('interactionCreate', async (interaction) => {
-        if (!interaction.isChatInputCommand()) return;
+    private setupCommandHandler() {
+    this.client.on('messageCreate', async (message: Message) => {
+        if (message.author.bot) return;
 
-        const commandInteraction = interaction as ChatInputCommandInteraction<CacheType>;
+        const args = message.content.trim().split(/\s+/);
+        const command = args[0].toLowerCase();
 
-        // Cast options to full resolver to satisfy TS
-        const options = commandInteraction.options as CommandInteractionOptionResolver;
+        // Check if user has the admin role
+        const member = message.member;
+        const hasAdminRole = member?.roles.cache.has(CONFIG.ADMIN_ROLE_ID);
+        if (!hasAdminRole) {
+            return this.tempReply(message, '❌ You do not have permission to use this command.');
+        }
 
-        try {
-            switch (commandInteraction.commandName) {
-                case 'announce': {
-                    // ✅ TypeScript now recognizes these
-                    const host: User = options.getUser('host', true);
-                    const time: string = options.getString('time', true);
-
-                    if (!this.isValidTime(time)) {
-                        await commandInteraction.reply({
-                            content: 'Invalid time format (use HHMM or HH:MM)',
-                            ephemeral: true,
-                        });
-                        return;
-                    }
-
-                    await commandInteraction.deferReply({ ephemeral: true });
-                    await this.handleAnnounceCommand(commandInteraction, host, this.formatTime(time));
-                    await commandInteraction.editReply({ 
-                        content: `✅ Session announced!\nHost: ${host.username}\nTime: ${this.formatTime(time)}` 
-                    });
-                    break;
+        switch (command) {
+            case '!announce': {
+                if (args.length < 3) {
+                    return this.tempReply(message, 'Usage: `!announce @host time (e.g. 2000)`');
                 }
-
-                case 'startsession':
-                    await commandInteraction.deferReply({ ephemeral: true });
-                    await this.handleStartSessionCommand(commandInteraction);
-                    break;
-
-                case 'test':
-                    await commandInteraction.deferReply({ ephemeral: true });
-                    await this.handleTestCommand(commandInteraction);
-                    await commandInteraction.editReply({ content: '✅ Test message sent!' });
-                    break;
+                const host = message.mentions.users.first();
+                const time = args[2];
+                if (!host || !this.isValidTime(time)) {
+                    return this.tempReply(message, 'Invalid host mention or time format (use HHMM or HH:MM)');
+                }
+                await this.handleAnnounceCommand(message, host, this.formatTime(time));
+                break;
             }
-        } catch (error) {
-            console.error(`Error handling command ${commandInteraction.commandName}:`, error);
-            await commandInteraction.reply({
-                content: 'An error occurred while processing the command.',
-                ephemeral: true,
-            }).catch(() => {});
+
+            case '!startsession':
+                await this.handleStartSessionCommand(message);
+                break;
+
+            case '!ssudm':
+                if (args.length < 2) return this.tempReply(message, 'Usage: `!ssudm <message_link>`');
+                await this.handleSSUDMCommand(message, args[1]);
+                break;
+
+            case '!test':
+                await this.handleTestCommand(message);
+                break;
         }
     });
 }
 
-    
     private async tempReply(message: Message, content: string) {
         const reply = await message.reply(content);
         setTimeout(() => reply.delete().catch(() => {}), 5000);
@@ -205,80 +192,102 @@ private setupCommandHandler() {
         }
     }
 
- private async handleAnnounceCommand(interaction: ChatInputCommandInteraction, host: User, time: string) {
-    try {
-        await this.deleteCurrentSession();
-        const msg = await this.channel.send(this.createAnnouncementMessage(time, host.id));
-        await msg.react('✅');
-        this.currentSessionMessage = msg;
+    private async handleAnnounceCommand(message: Message, host: User, time: string) {
+        try {
+            await this.deleteCurrentSession();
+            const msg = await this.channel.send(this.createAnnouncementMessage(time, host.id));
+            await msg.react('✅');
+            this.currentSessionMessage = msg;
+            await message.delete().catch(() => {});
 
-        const collector = msg.createReactionCollector({ 
-            filter: (r, u) => !u.bot && r.emoji.name === '✅' 
-        });
-        collector.on('collect', (_, user) => this.sessionReactors.add(user.id));
-    } catch (error) {
-        console.error('Error in announce command:', error);
-        throw error;
+            // track reactions
+            const collector = msg.createReactionCollector({ filter: (r, u) => !u.bot && r.emoji.name === '✅' });
+            collector.on('collect', (_, user) => this.sessionReactors.add(user.id));
+        } catch (error) {
+            console.error('Error in announce command:', error);
+        }
     }
-}
 
-private async handleStartSessionCommand(interaction: ChatInputCommandInteraction) {
-    try {
-        // 1️⃣ Tell the user it's starting
-        await interaction.editReply({ content: 'Starting session... sending reminders.' });
+    private async handleStartSessionCommand(message: Message) {
+        try {
+            await this.sendSessionReminders();
+            await this.channel.send({
+                content: `@everyone The session has now started — join here: https://www.roblox.com/games/113438623811968/Brixton-South-London`,
+            });
+            await message.delete().catch(() => {});
+        } catch (error) {
+            console.error('Error in start session command:', error);
+        }
+    }
 
-        // 2️⃣ DM all users who reacted ✅
-        const gameLink = 'https://www.roblox.com/games/113438623811968/Brixton-South-London';
-        let successCount = 0;
-        let failCount = 0;
+    private async handleSSUDMCommand(invokingMessage: Message, messageLink: string) {
+        try {
+            const parts = messageLink.replace(/\/+$/, '').split('/');
+            const messageId = parts.pop();
+            const channelId = parts.pop();
 
-        if (this.sessionReactors.size === 0) {
-            await interaction.editReply({ content: '⚠️ No users have reacted ✅ to the session announcement.' });
-        } else {
-            for (const userId of this.sessionReactors) {
+            if (!channelId || !messageId) return this.tempReply(invokingMessage, 'Invalid message link.');
+
+            const fetchedChannel = await this.client.channels.fetch(channelId).catch(() => null);
+            if (!fetchedChannel || !fetchedChannel.isTextBased()) return this.tempReply(invokingMessage, 'Could not access that channel.');
+
+            const targetMessage = await (fetchedChannel as TextChannel).messages.fetch(messageId).catch(() => null);
+            if (!targetMessage) return this.tempReply(invokingMessage, 'Message not found.');
+
+            const reaction = targetMessage.reactions.cache.get('✅') || targetMessage.reactions.cache.find(r => r.emoji.name === '✅');
+            if (!reaction) return this.tempReply(invokingMessage, 'No ✅ reactions found on that message.');
+
+            const users = await reaction.users.fetch();
+            const recipients = users.filter(u => !u.bot);
+            if (!recipients.size) return this.tempReply(invokingMessage, 'No non-bot users reacted to that message.');
+
+            const gameLink = 'https://www.roblox.com/games/113438623811968/Brixton-South-London';
+            let successCount = 0;
+
+            for (const [, user] of recipients) {
                 try {
-                    const user = await this.client.users.fetch(userId);
                     await user.send({
-                        content: `**Brixton Session | Reminder**\n\n<@${userId}> you reacted ✅ to a session earlier. The session is now starting — join below:\n${gameLink}`,
+                        content: `**Brixton Session | Reminder**\n\n<@${user.id}> you reacted ✅ to a session in Brixton. We're now starting! Join below:\n${gameLink}`,
                     });
                     successCount++;
-                } catch (error) {
-                    console.error(`Failed to DM ${userId}:`, error);
-                    failCount++;
+                } catch (err) {
+                    console.error(`Failed to DM ${user.id}:`, err);
                 }
             }
 
-            await interaction.followUp({
-                content: `✅ Sent DM reminders to **${successCount}** users (${failCount} failed).`,
-                ephemeral: true,
-            });
+            await invokingMessage.delete().catch(() => {});
+            const confirm = await (invokingMessage.channel as TextChannel).send(`Sent DMs to ${successCount} user(s).`);
+            setTimeout(() => confirm.delete().catch(() => {}), 7000);
+        } catch (error) {
+            console.error('Error in !ssudm:', error);
+            this.tempReply(invokingMessage, 'An error occurred while sending DMs.');
         }
-
-        // 3️⃣ Announce session start in the channel
-        await this.channel.send({
-            content: `@everyone The session has now started — join here: ${gameLink}`,
-        });
-    } catch (error) {
-        console.error('Error in start session command:', error);
-        await interaction.followUp({
-            content: '❌ An error occurred while starting the session.',
-            ephemeral: true,
-        }).catch(() => {});
     }
-}
 
-private async handleTestCommand(interaction: ChatInputCommandInteraction) {
-    try {
-        const sentMessage = await this.channel.send(
-            this.createAnnouncementMessage('20:00', interaction.user.id, false)
-        );
-        await sentMessage.react('✅');
-        setTimeout(async () => {
-            await sentMessage.delete().catch(() => {});
-        }, 5 * 60 * 1000);
-    } catch (error) {
-        console.error('Error in test command:', error);
-        throw error;
+    private async sendSessionReminders() {
+        const gameLink = 'https://www.roblox.com/games/113438623811968/Brixton-South-London';
+        for (const userId of this.sessionReactors) {
+            try {
+                const user = await this.client.users.fetch(userId);
+                await user.send({
+                    content: `**Brixton Session | Reminder**\n\n<@${userId}> you reacted ✅ to a session earlier. The session is now starting — join below:\n${gameLink}`,
+                });
+            } catch (error) {
+                console.error(`Failed to send DM to user ${userId}:`, error);
+            }
+        }
     }
-}
+
+    private async handleTestCommand(message: Message) {
+        try {
+            const sentMessage = await this.channel.send(this.createAnnouncementMessage('20:00', message.author.id, false));
+            await sentMessage.react('✅');
+            setTimeout(async () => {
+                await sentMessage.delete().catch(() => {});
+            }, 5 * 60 * 1000);
+            await message.delete().catch(() => {});
+        } catch (error) {
+            console.error('Error in test command:', error);
+        }
+    }
 }
