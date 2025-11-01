@@ -133,14 +133,15 @@ public async registerCommands() {
 private setupCommandHandler() {
     this.client.on('interactionCreate', async (interaction) => {
         if (!interaction.isChatInputCommand()) return;
+        const commandInteraction = interaction as ChatInputCommandInteraction<CacheType>;
 
-        const roles = (interaction.member as any)?.roles;
+        const roles = (commandInteraction.member as any)?.roles;
         const hasAdminRole = Array.isArray(roles)
             ? roles.includes(CONFIG.ADMIN_ROLE_ID)
             : !!roles?.cache?.has?.(CONFIG.ADMIN_ROLE_ID);
 
         if (!hasAdminRole) {
-            await interaction.reply({ 
+            await commandInteraction.reply({ 
                 content: '❌ You do not have permission to use this command.', 
                 ephemeral: true 
             });
@@ -148,42 +149,42 @@ private setupCommandHandler() {
         }
 
         try {
-            switch (interaction.commandName) {
+            switch (commandInteraction.commandName) {
                 case 'announce': {
-                    const user = interaction.options.getUser('host', true);
-                    const member = await interaction.guild?.members.fetch(user.id).catch(() => null);
-                    const time = interaction.options.getString('time', true);
+                    const user = commandInteraction.options.getUser('host', true);
+                    const member = await commandInteraction.guild?.members.fetch(user.id).catch(() => null);
+                    const time = commandInteraction.options.getString('time', true);
 
                     if (!this.isValidTime(time)) {
-                        await interaction.reply({ 
+                        await commandInteraction.reply({ 
                             content: 'Invalid time format (use HHMM or HH:MM)', 
                             ephemeral: true 
                         });
                         return;
                     }
 
-                    await interaction.deferReply({ ephemeral: true });
-                    await this.handleAnnounceCommand(interaction, user, this.formatTime(time));
-                    await interaction.editReply({ 
+                    await commandInteraction.deferReply({ ephemeral: true });
+                    await this.handleAnnounceCommand(commandInteraction, user, this.formatTime(time));
+                    await commandInteraction.editReply({ 
                         content: `✅ Session announced!\nHost: ${member ? member.displayName : user.username}\nTime: ${this.formatTime(time)}` 
                     });
                     break;
                 }
 
                 case 'startsession':
-                    await interaction.deferReply({ ephemeral: true });
-                    await this.handleStartSessionCommand(interaction);
+                    await commandInteraction.deferReply({ ephemeral: true });
+                    await this.handleStartSessionCommand(commandInteraction);
                     break;
 
                 case 'test':
-                    await interaction.deferReply({ ephemeral: true });
-                    await this.handleTestCommand(interaction);
-                    await interaction.editReply({ content: '✅ Test message sent!' });
+                    await commandInteraction.deferReply({ ephemeral: true });
+                    await this.handleTestCommand(commandInteraction);
+                    await commandInteraction.editReply({ content: '✅ Test message sent!' });
                     break;
             }
         } catch (error) {
-            console.error(`Error handling command ${interaction.commandName}:`, error);
-            await interaction.reply({ 
+            console.error(`Error handling command ${commandInteraction.commandName}:`, error);
+            await commandInteraction.reply({ 
                 content: 'An error occurred while processing the command.', 
                 ephemeral: true 
             }).catch(() => {});
