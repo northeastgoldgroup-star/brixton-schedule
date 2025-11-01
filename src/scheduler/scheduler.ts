@@ -39,26 +39,50 @@ export class Scheduler {
         return timeString;
     }
 
-    public async start(): Promise<void> {
-        console.log('Scheduler started');
+private updatePresence() {
+    if (!this.client.isReady()) return;
+    
+    const guild = this.client.guilds.cache.first();
+    if (!guild) return;
 
-        if (!this.client.isReady()) {
-            await new Promise<void>((resolve) => {
-                this.client.once('ready', () => resolve());
-            });
-        }
+    const memberCount = guild.memberCount;
+    
+    this.client.user?.setPresence({
+        status: 'dnd',
+        activities: [{
+            name: `${memberCount} members`,
+            type: 3 // 3 is "WATCHING"
+        }]
+    });
+}
 
-        const channelId = CONFIG.CHANNEL_ID;
-        if (!channelId) throw new Error('CHANNEL_ID is not defined in config.');
 
-        const fetchedChannel = await this.client.channels.fetch(channelId);
-        if (!fetchedChannel || !fetchedChannel.isTextBased()) {
-            throw new Error('Invalid CHANNEL_ID or channel is not text-based.');
-        }
+public async start(): Promise<void> {
+    console.log('Scheduler started');
 
-        this.channel = fetchedChannel as TextChannel;
-        this.setupCommandHandler();
+    if (!this.client.isReady()) {
+        await new Promise<void>((resolve) => {
+            this.client.once('ready', () => resolve());
+        });
     }
+
+    const channelId = CONFIG.CHANNEL_ID;
+    if (!channelId) throw new Error('CHANNEL_ID is not defined in config.');
+
+    const fetchedChannel = await this.client.channels.fetch(channelId);
+    if (!fetchedChannel || !fetchedChannel.isTextBased()) {
+        throw new Error('Invalid CHANNEL_ID or channel is not text-based.');
+    }
+
+    this.channel = fetchedChannel as TextChannel;
+    this.setupCommandHandler();
+    
+    // Initial presence update
+    this.updatePresence();
+    
+    // Update presence every 5 minutes
+    setInterval(() => this.updatePresence(), 5 * 60 * 1000);
+}
 
     private setupCommandHandler() {
         this.client.on('messageCreate', async (message: Message) => {
