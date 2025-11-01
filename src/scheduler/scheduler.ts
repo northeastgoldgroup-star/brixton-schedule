@@ -127,14 +127,17 @@ public async registerCommands() {
 }
 
 
-    private setupCommandHandler() {
+private setupCommandHandler() {
     this.client.on('messageCreate', async (message: Message) => {
         if (message.author.bot) return;
 
         const args = message.content.trim().split(/\s+/);
         const command = args[0].toLowerCase();
 
-        // Check if user has the admin role
+        // Only check admin role for recognized commands
+        const adminCommands = ['!announce', '!startsession', '!ssudm', '!test'];
+        if (!adminCommands.includes(command)) return;
+
         const member = message.member;
         const hasAdminRole = member?.roles.cache.has(CONFIG.ADMIN_ROLE_ID);
         if (!hasAdminRole) {
