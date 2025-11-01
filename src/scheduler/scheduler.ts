@@ -150,17 +150,10 @@ private setupCommandHandler() {
         try {
             switch (interaction.commandName) {
                 case 'announce': {
-                    const host = interaction.options.getMember('host');
-                    const time = interaction.options.get('time')?.value as string;
-                    
-                    if (!host || !time) {
-                        await interaction.reply({ 
-                            content: 'Missing required options.', 
-                            ephemeral: true 
-                        });
-                        return;
-                    }
-                    
+                    const user = interaction.options.getUser('host', true);
+                    const member = await interaction.guild?.members.fetch(user.id).catch(() => null);
+                    const time = interaction.options.getString('time', true);
+
                     if (!this.isValidTime(time)) {
                         await interaction.reply({ 
                             content: 'Invalid time format (use HHMM or HH:MM)', 
@@ -168,23 +161,24 @@ private setupCommandHandler() {
                         });
                         return;
                     }
-                    
+
                     await interaction.deferReply({ ephemeral: true });
-                    await this.handleAnnounceCommand(interaction, host.user, this.formatTime(time));
-                    await interaction.editReply({ content: 'Session announced!' });
+                    await this.handleAnnounceCommand(interaction, user, this.formatTime(time));
+                    await interaction.editReply({ 
+                        content: `✅ Session announced!\nHost: ${member ? member.displayName : user.username}\nTime: ${this.formatTime(time)}` 
+                    });
                     break;
                 }
 
                 case 'startsession':
                     await interaction.deferReply({ ephemeral: true });
                     await this.handleStartSessionCommand(interaction);
-                    await interaction.editReply({ content: 'Session started and reminders sent!' });
                     break;
 
                 case 'test':
                     await interaction.deferReply({ ephemeral: true });
                     await this.handleTestCommand(interaction);
-                    await interaction.editReply({ content: 'Test message sent!' });
+                    await interaction.editReply({ content: '✅ Test message sent!' });
                     break;
             }
         } catch (error) {
@@ -196,7 +190,7 @@ private setupCommandHandler() {
         }
     });
 }
-
+    
     private async tempReply(message: Message, content: string) {
         const reply = await message.reply(content);
         setTimeout(() => reply.delete().catch(() => {}), 5000);
