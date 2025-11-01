@@ -131,6 +131,17 @@ public async registerCommands() {
     private setupCommandHandler() {
 this.client.on('interactionCreate', async (interaction) => {
     if (!interaction.isChatInputCommand()) return;
+        const roles = (interaction.member as any)?.roles;
+        const hasAdminRole = Array.isArray(roles)
+            ? roles.includes(CONFIG.ADMIN_ROLE_ID)
+            : !!roles?.cache?.has?.(CONFIG.ADMIN_ROLE_ID);
+        if (!hasAdminRole) {
+            await interaction.reply({ 
+                content: '❌ You do not have permission to use this command.', 
+                ephemeral: true 
+            });
+            return;
+        }
 
         try {
             switch (interaction.commandName) {
