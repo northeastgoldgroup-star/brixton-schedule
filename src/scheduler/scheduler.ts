@@ -4,7 +4,6 @@ import {
     Message, 
     User,
     ApplicationCommandType,
-    CommandInteraction,
     SlashCommandBuilder,
     ChatInputCommandInteraction
 } from 'discord.js';
@@ -207,7 +206,7 @@ this.client.on('interactionCreate', async (interaction) => {
         }
     }
 
- private async handleAnnounceCommand(interaction: CommandInteraction, host: User, time: string) {
+ private async handleAnnounceCommand(interaction: ChatInputCommandInteraction, host: User, time: string) {
     try {
         await this.deleteCurrentSession();
         const msg = await this.channel.send(this.createAnnouncementMessage(time, host.id));
@@ -269,7 +268,7 @@ private async handleStartSessionCommand(interaction: ChatInputCommandInteraction
     }
 }
 
-private async handleTestCommand(interaction: CommandInteraction) {
+private async handleTestCommand(interaction: ChatInputCommandInteraction) {
     try {
         const sentMessage = await this.channel.send(
             this.createAnnouncementMessage('20:00', interaction.user.id, false)
